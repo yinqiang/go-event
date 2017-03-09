@@ -19,18 +19,21 @@ type Event struct {
 	events map[string]*list.List
 }
 
+type EventListener *func(interface{})
+
 func NewEventManager() *Event {
 	return &Event{
 		events: make(map[string]*list.List),
 	}
 }
 
-func (e *Event) AddEventListener(name string, listener *func(interface{})) error {
+func (e *Event) AddEventListener(name string, listener EventListener) error {
 	if len(name) == 0 {
 		return ErrEventNameEmpty
 	}
 	e.Lock()
 	defer e.Unlock()
+
 	lst, exist := e.events[name]
 	if !exist {
 		lst = list.New()
@@ -46,7 +49,7 @@ func (e *Event) AddEventListener(name string, listener *func(interface{})) error
 	return nil
 }
 
-func (e *Event) RemoveEventListener(name string, listener *func(interface{})) error {
+func (e *Event) RemoveEventListener(name string, listener EventListener) error {
 	if len(name) == 0 {
 		return ErrEventNameEmpty
 	} else if listener == nil {
@@ -54,10 +57,12 @@ func (e *Event) RemoveEventListener(name string, listener *func(interface{})) er
 	}
 	e.Lock()
 	defer e.Unlock()
+
 	lst, exist := e.events[name]
 	if !exist {
 		return ErrEventNotFound
 	}
+
 	for lt := lst.Front(); lt != nil; lt = lt.Next() {
 		if lt.Value == listener {
 			lst.Remove(lt)
@@ -73,6 +78,7 @@ func (e *Event) RemoveAllListeners(name string) error {
 	}
 	e.Lock()
 	defer e.Unlock()
+
 	_, exist := e.events[name]
 	if !exist {
 		return ErrEventNotFound
@@ -87,13 +93,14 @@ func (e *Event) DispatchEvent(name string, data interface{}) error {
 	}
 	e.Lock()
 	defer e.Unlock()
+
 	lst, exist := e.events[name]
 	if !exist {
 		return ErrEventNotFound
 	}
 	for c := lst.Front(); c != nil; c = c.Next() {
-		f := c.Value.(*func(interface{}))
-		(*f)(data)
+		f := c.Value.(EventListener)
+		go (*f)(data)
 	}
 	return nil
 }
